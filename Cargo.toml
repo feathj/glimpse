@@ -1,0 +1,19 @@
+[package]
+name = "glimpse"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.94"
+aws-config = "1.5.11"
+aws-sdk-bedrockruntime = "1.65.0"
+aws-sdk-rekognition = "1.54.0"
+base64 = "0.22.1"
+clap = { version = "4.5.23", features = ["derive"] }
+glob = "0.3.1"
+image = "0.25.5"
+little_exif = "0.6.2"
+serde = { version = "1.0.216", features = ["derive"] }
+serde_json = "1.0.133"
+tempfile = "3.14.0"
+tokio = {version = "1", features = ["full"]}
