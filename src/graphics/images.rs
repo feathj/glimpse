@@ -3,6 +3,11 @@ use anyhow::Result;
 use std::path::PathBuf;
 use std::path::Path;
 
+use aws_sdk_bedrockruntime::{
+    types::{ImageBlock, ImageFormat, ImageSource},
+    primitives::Blob,
+};
+
 pub fn resize_image(input_path: &str, output_path: &str, max_size: u32) -> Result<()> {
     // Open the image
     let img = image::open(&input_path)?;
@@ -49,4 +54,13 @@ pub fn clear_temp_file(file_path: &str) -> Result<()> {
     let path = PathBuf::from(file_path);
     std::fs::remove_file(path)?;
     Ok(())
+}
+
+pub fn path_to_bedrock_image_block(file_path: &str) -> Result<ImageBlock> {
+    let bytes = std::fs::read(file_path)?;
+    let image = ImageBlock::builder()
+        .format(ImageFormat::Jpeg)
+        .source(ImageSource::Bytes(Blob::new(bytes)))
+        .build()?;
+    Ok(image)
 }

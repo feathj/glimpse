@@ -10,6 +10,16 @@ pub struct PhotoMeta {
     pub description: String,
 }
 
+impl PhotoMeta {
+    pub fn description_context(&self) -> String {
+        let description_context = PhotoMeta {
+            people: self.people.clone(),
+            description: "".to_string(),
+        };
+        serde_json::to_string(&description_context).unwrap()
+    }
+}
+
 pub async fn get_metadata(file: &str) -> Result<PhotoMeta, Box<dyn Error>> {
     let path = std::path::Path::new(file);
     let metadata = Metadata::new_from_path(path)?;

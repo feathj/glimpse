@@ -1,9 +1,11 @@
 use aws_config::{meta::region::RegionProviderChain, BehaviorVersion, Region};
 use aws_sdk_bedrockruntime::{
     operation::converse::{ConverseError, ConverseOutput},
-    types::{ContentBlock, ConversationRole, Message}
+    types::{ContentBlock, ConversationRole, Message},
 };
 use std::error::Error;
+
+use crate::graphics::images::path_to_bedrock_image_block;
 
 const MODEL_ID: &str = "anthropic.claude-3-haiku-20240307-v1:0";
 
@@ -59,9 +61,31 @@ fn get_converse_output_text(output: ConverseOutput) -> Result<String, BedrockCon
     Ok(text)
 }
 
-// pub async fn get_image_description(file: &str, additional_context: &str) -> Result<String, Box<dyn Error>> {
-// }
+pub async fn describe_image(file_path: &str, additional_context: &str) -> Result<String, Box<dyn Error>> {
+    let content_text = format!("Describe the image. Here is some additional context to help: {}", additional_context);
 
+    let message_user = Message::builder()
+        .role(ConversationRole::User)
+        .content(ContentBlock::Text(content_text.to_string()))
+        .content(ContentBlock::Image(path_to_bedrock_image_block(file_path)?))
+        .build()?;
+
+    let bedrock_client = bedrock_client().await;
+    let response = bedrock_client
+        .converse()
+        .messages(message_user)
+        .model_id(MODEL_ID)
+        .send()
+        .await;
+
+    match response {
+        Ok(output) => {
+            let text = get_converse_output_text(output)?;
+            Ok(text)
+        }
+        Err(e) => Err(Box::new(e)),
+    }
+}
 pub async fn converse(content: &str) -> Result<String, Box<dyn Error>> {
     let bedrock_client = bedrock_client().await;
     let response = bedrock_client

@@ -4,6 +4,7 @@ use glob::glob;
 
 use crate::processing::metadata;
 use crate::ai::vision;
+use crate::ai::llm;
 use crate::processing::args;
 
 async fn tag_person(reference_file: &str, files: Vec<String>, person_name: &str, confidence: f32) -> Result<(), Box<dyn Error>> {
@@ -68,6 +69,23 @@ async fn clear_metadata(files: Vec<String>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+async fn tag_description(files: Vec<String>) -> Result<(), Box<dyn Error>> {
+    for file in files {
+        // Load original metadata
+        let mut metadata = metadata::get_metadata(&file).await?;
+
+        // get description from AI, including additional context (people in the photo)
+        let description = llm::describe_image(&file, &metadata.description_context()).await?;
+        metadata.description = description;
+
+        match metadata::write_metadata(&file, metadata).await {
+            Ok(_) => println!("Tagged description for {}", file),
+            Err(e) => println!("Failed to tag description for {}: {:?}", file, e),
+        }
+    }
+    Ok(())
+}
+
 pub async fn run(args: &args::Args) -> Result<(), Box<dyn Error>> {
     // expand glob pattern in files
     let files = glob(&args.files)?
@@ -78,6 +96,8 @@ pub async fn run(args: &args::Args) -> Result<(), Box<dyn Error>> {
 
     if args.action == "tag-person" {
         return tag_person(&args.reference_file, files, &args.person_name, args.confidence).await;
+    } else if args.action == "tag-description" {
+        return tag_description(files).await;
     } else if args.action == "clear-metadata" {
         return clear_metadata(files).await;
     } else if args.action == "describe" {
