@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use std::path::Path;
 
 pub fn resize_image(input_path: &str, output_path: &str, max_size: u32) -> Result<()> {
-    //print!("Resizing image from {} to {}", input_path, output_path);
     // Open the image
     let img = image::open(&input_path)?;
     

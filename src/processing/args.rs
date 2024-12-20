@@ -1,0 +1,16 @@
+use clap::Parser;
+
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+pub struct Args {
+    #[arg(short, long)]
+    pub action: String,
+    #[clap(short, long, required = true)]
+    pub files: String,
+    #[clap(short, long, required_if_eq("action", "tag-person"), default_value = "")]
+    pub person_name: String,
+    #[clap(short, long, required_if_eq("action", "tag-person"), default_value = "")]
+    pub reference_file: String,
+    #[clap(short, long, default_value = "85.0")]
+    pub confidence: f32,
+}

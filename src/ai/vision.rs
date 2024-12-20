@@ -1,9 +1,12 @@
 use aws_config::meta::region::RegionProviderChain;
+
 use aws_sdk_rekognition::config::Region;
 use aws_sdk_rekognition::types::Image;
 use aws_sdk_rekognition::primitives::Blob;
 use aws_config::BehaviorVersion;
 use std::error::Error;
+
+use crate::graphics::images;
 
 async fn rek_client() -> aws_sdk_rekognition::Client {
     let rek_region = std::env::var("AWS_REGION").ok();
@@ -22,21 +25,21 @@ async fn rek_client() -> aws_sdk_rekognition::Client {
 pub async fn compare_faces(reference_file: &str, target_file: &str) -> Result<f32, Box<dyn Error>> {
     let rek_client = rek_client().await;
 
-    let tmp_reference_file = super::imageproc::resize_temp_image(reference_file, 1000)?;
+    let tmp_reference_file = images::resize_temp_image(reference_file, 1000)?; // TODO: make a more scientific decision on the resizes
     let source_image = Image::builder()
         .bytes(Blob::new(
             std::fs::read(&tmp_reference_file)?
         ))
         .build();
-    super::imageproc::clear_temp_file(&tmp_reference_file)?;
+    images::clear_temp_file(&tmp_reference_file)?;
 
-    let tmp_target_file = super::imageproc::resize_temp_image(target_file, 1000)?;
+    let tmp_target_file = images::resize_temp_image(target_file, 1000)?;
     let target_image = Image::builder()
         .bytes(Blob::new(
             std::fs::read(&tmp_target_file)?
         ))
         .build();
-    super::imageproc::clear_temp_file(&tmp_target_file)?;
+    images::clear_temp_file(&tmp_target_file)?;
 
 
     let resp = rek_client.compare_faces()
