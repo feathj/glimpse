@@ -7,7 +7,8 @@ use std::error::Error;
 
 use crate::graphics::images::path_to_bedrock_image_block;
 
-const MODEL_ID: &str = "anthropic.claude-3-haiku-20240307-v1:0";
+//const MODEL_ID: &str = "anthropic.claude-3-haiku-20240307-v1:0";
+const MODEL_ID: &str = "anthropic.claude-3-5-haiku-20241022-v1:0";
 
 #[derive(Debug)]
 struct BedrockConverseError(String);

@@ -8,7 +8,7 @@ use crate::ai::llm;
 use crate::processing::args;
 
 async fn tag_person(reference_file: &str, files: Vec<String>, person_name: &str, confidence: f32) -> Result<(), Box<dyn Error>> {
-    let total = files.len() + 1;
+    let total = files.len();
     let mut count = 0;
     for file in files {
         count += 1;
@@ -19,14 +19,13 @@ async fn tag_person(reference_file: &str, files: Vec<String>, person_name: &str,
             continue;
         }
 
-        match metadata::get_metadata(&file).await {
+        match metadata::get_metadata(&file) {
             Ok(mut metadata) => {
                 if metadata.people.contains(&person_name.to_string()) {
                     println!("{} is already tagged in {}", person_name, file);
                 } else {
                     match vision::compare_faces(reference_file, &file).await {
                         Ok(similarity) => {
-                            println!("Similarity: {}", similarity);
                             if similarity >= confidence { // TODO: check if this is right threshold?
                                 metadata.people.push(person_name.to_string());
                                 if let Err(e) = metadata::write_metadata(&file, metadata).await {
@@ -46,9 +45,9 @@ async fn tag_person(reference_file: &str, files: Vec<String>, person_name: &str,
     Ok(())
 }
 
-async fn describe(files: Vec<String>) -> Result<(), Box<dyn Error>> {
+async fn show_metadata(files: Vec<String>) -> Result<(), Box<dyn Error>> {
     for file in files {
-        match metadata::get_metadata(&file).await {
+        match metadata::get_metadata(&file) {
             Ok(metadata) => println!("{}: {:?}", file, metadata),
             Err(e) => println!("Failed to get metadata for {}: {:?}", file, e),
         }
@@ -70,9 +69,13 @@ async fn clear_metadata(files: Vec<String>) -> Result<(), Box<dyn Error>> {
 }
 
 async fn tag_description(files: Vec<String>) -> Result<(), Box<dyn Error>> {
+    let total = files.len();
+    let mut count = 0;
     for file in files {
+        count += 1;
+        println!("{} / {}: {}", count, total, file);
         // Load original metadata
-        let mut metadata = metadata::get_metadata(&file).await?;
+        let mut metadata = metadata::get_metadata(&file)?;
 
         // get description from AI, including additional context (people in the photo)
         let description = llm::describe_image(&file, &metadata.description_context()).await?;
@@ -100,8 +103,8 @@ pub async fn run(args: &args::Args) -> Result<(), Box<dyn Error>> {
         return tag_description(files).await;
     } else if args.action == "clear-metadata" {
         return clear_metadata(files).await;
-    } else if args.action == "describe" {
-        return describe(files).await;
+    } else if args.action == "show-metadata" {
+        return show_metadata(files).await;
     } else {
         println!("Unknown action: {}", args.action);
     }

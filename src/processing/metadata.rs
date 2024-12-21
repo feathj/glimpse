@@ -1,6 +1,7 @@
 use little_exif::metadata::Metadata;
 use little_exif::exif_tag::ExifTag;
 use little_exif::u8conversion::*;
+
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 
@@ -20,7 +21,7 @@ impl PhotoMeta {
     }
 }
 
-pub async fn get_metadata(file: &str) -> Result<PhotoMeta, Box<dyn Error>> {
+pub fn get_metadata(file: &str) -> Result<PhotoMeta, Box<dyn Error>> {
     let path = std::path::Path::new(file);
     let metadata = Metadata::new_from_path(path)?;
 

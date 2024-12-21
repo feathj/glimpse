@@ -56,10 +56,23 @@ pub fn clear_temp_file(file_path: &str) -> Result<()> {
     Ok(())
 }
 
+fn path_to_image_format(file_path: &str) -> Result<ImageFormat> {
+    let path = Path::new(file_path);
+    let extension = path.extension().unwrap().to_str().unwrap();
+    let format = match extension {
+        "jpg" | "jpeg" => ImageFormat::Jpeg,
+        "png" => ImageFormat::Png,
+        "gif" => ImageFormat::Gif,
+        "webp" => ImageFormat::Webp,
+        _ => return Err(anyhow::anyhow!("Unsupported image format")),
+    };
+    Ok(format)
+}
+
 pub fn path_to_bedrock_image_block(file_path: &str) -> Result<ImageBlock> {
     let bytes = std::fs::read(file_path)?;
     let image = ImageBlock::builder()
-        .format(ImageFormat::Jpeg)
+        .format(path_to_image_format(file_path)?)
         .source(ImageSource::Bytes(Blob::new(bytes)))
         .build()?;
     Ok(image)
