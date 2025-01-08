@@ -13,4 +13,8 @@ pub struct Args {
     pub reference_file: String,
     #[clap(short, long, default_value = "85.0")]
     pub confidence: f32,
+    #[clap(short, long, action)]
+    pub overwrite: bool,
+    #[clap(short, long, required_if_eq("action", "tag"), default_value = "")]
+    pub tags: String,
 }

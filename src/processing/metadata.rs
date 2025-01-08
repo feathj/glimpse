@@ -9,6 +9,7 @@ use std::error::Error;
 pub struct PhotoMeta {
     pub people: Vec<String>,
     pub description: String,
+    pub tags: Vec<String>,
 }
 
 impl PhotoMeta {
@@ -16,6 +17,7 @@ impl PhotoMeta {
         let description_context = PhotoMeta {
             people: self.people.clone(),
             description: "".to_string(),
+            tags: vec![],
         };
         serde_json::to_string(&description_context).unwrap()
     }
@@ -38,6 +40,7 @@ pub fn get_metadata(file: &str) -> Result<PhotoMeta, Box<dyn Error>> {
     Ok(PhotoMeta {
         people: vec![],
         description: "".to_string(),
+        tags: vec![],
     })
 }
 

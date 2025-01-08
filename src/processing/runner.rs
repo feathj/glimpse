@@ -60,6 +60,7 @@ async fn clear_metadata(files: Vec<String>) -> Result<(), Box<dyn Error>> {
         match metadata::write_metadata(&file, metadata::PhotoMeta {
             people: vec![],
             description: "".to_string(),
+            tags: vec![],
         }).await {
             Ok(_) => println!("Cleared metadata for {}", file),
             Err(e) => println!("Failed to clear metadata for {}: {:?}", file, e),
@@ -68,22 +69,85 @@ async fn clear_metadata(files: Vec<String>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn tag_description(files: Vec<String>) -> Result<(), Box<dyn Error>> {
+async fn tag_description(files: Vec<String>, overwrite: bool) -> Result<(), Box<dyn Error>> {
     let total = files.len();
     let mut count = 0;
     for file in files {
         count += 1;
         println!("{} / {}: {}", count, total, file);
-        // Load original metadata
-        let mut metadata = metadata::get_metadata(&file)?;
 
-        // get description from AI, including additional context (people in the photo)
-        let description = llm::describe_image(&file, &metadata.description_context()).await?;
+        // Load original metadata
+        let mut metadata = match metadata::get_metadata(&file) {
+            Ok(metadata) => metadata,
+            Err(e) => {
+                println!("Failed to get metadata for {}: {:?}", file, e);
+                continue;
+            }
+        };
+
+        if metadata.description != "" && !overwrite {
+            println!("Description already exists for {}", file);
+            continue;
+        }
+
+        // Get description from AI, including additional context (people in the photo)
+        let description = match llm::describe_image(&file, &metadata.description_context()).await {
+            Ok(description) => description,
+            Err(e) => {
+                println!("Failed to describe image for {}: {:?}", file, e);
+                continue;
+            }
+        };
         metadata.description = description;
 
+        // Write updated metadata
         match metadata::write_metadata(&file, metadata).await {
             Ok(_) => println!("Tagged description for {}", file),
-            Err(e) => println!("Failed to tag description for {}: {:?}", file, e),
+            Err(e) => println!("Failed to write metadata for {}: {:?}", file, e),
+        }
+    }
+    Ok(())
+}
+
+async fn tag(files: Vec<String>, tags: &Vec<String>, overwrite: bool) -> Result<(), Box<dyn Error>> {
+    let total = files.len();
+    let mut count = 0;
+    for file in files {
+        count += 1;
+        println!("{} / {}: {}", count, total, file);
+
+        // Load original metadata
+        let mut metadata = match metadata::get_metadata(&file) {
+            Ok(metadata) => metadata,
+            Err(e) => {
+                println!("Failed to get metadata for {}: {:?}", file, e);
+                continue;
+            }
+        };
+
+        if overwrite {
+            metadata.tags = vec![];
+        }
+
+        // Get tag from AI
+        let tag = match llm::tag_metadata(&metadata, tags).await {
+            Ok(tag) => tag,
+            Err(e) => {
+                println!("Failed to tag from metadata for {}: {:?}", file, e);
+                continue;
+            }
+        };
+        // Check if tag is already in metadata
+        if metadata.tags.contains(&tag) {
+            println!("Tag already exists for {}", file);
+            continue;
+        }
+        metadata.tags.push(tag);
+
+        // Write updated metadata
+        match metadata::write_metadata(&file, metadata).await {
+            Ok(_) => println!("Tagged metadata for {}", file),
+            Err(e) => println!("Failed to write metadata for {}: {:?}", file, e),
         }
     }
     Ok(())
@@ -96,11 +160,16 @@ pub async fn run(args: &args::Args) -> Result<(), Box<dyn Error>> {
         .filter_map(|path| path.to_str().map(String::from))  // Convert to strings
         .collect();
 
+    let tags: Vec<String> = args.tags.split(',')
+    .map(|tag| tag.trim().to_string())  // Split and trim whitespace
+    .collect();
 
     if args.action == "tag-person" {
         return tag_person(&args.reference_file, files, &args.person_name, args.confidence).await;
     } else if args.action == "tag-description" {
-        return tag_description(files).await;
+        return tag_description(files, args.overwrite).await;
+    } else if args.action == "tag" {
+        return tag(files, &tags, args.overwrite).await;
     } else if args.action == "clear-metadata" {
         return clear_metadata(files).await;
     } else if args.action == "show-metadata" {
