@@ -3,8 +3,7 @@ use std::result::Result;
 use glob::glob;
 
 use crate::processing::metadata;
-use crate::ai::vision;
-use crate::ai::llm;
+use crate::ai::{vision, llm, embedding};
 use crate::processing::args;
 
 async fn tag_person(reference_file: &str, files: Vec<String>, person_name: &str, confidence: f32) -> Result<(), Box<dyn Error>> {
@@ -60,6 +59,7 @@ async fn clear_metadata(files: Vec<String>) -> Result<(), Box<dyn Error>> {
         match metadata::write_metadata(&file, metadata::PhotoMeta {
             people: vec![],
             description: "".to_string(),
+            description_embedding: vec![],
             tags: vec![],
         }).await {
             Ok(_) => println!("Cleared metadata for {}", file),
@@ -69,7 +69,7 @@ async fn clear_metadata(files: Vec<String>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn tag_description(files: Vec<String>, overwrite: bool) -> Result<(), Box<dyn Error>> {
+async fn tag_description(files: Vec<String>, overwrite: bool, prompt: &str) -> Result<(), Box<dyn Error>> {
     let total = files.len();
     let mut count = 0;
     for file in files {
@@ -91,14 +91,23 @@ async fn tag_description(files: Vec<String>, overwrite: bool) -> Result<(), Box<
         }
 
         // Get description from AI, including additional context (people in the photo)
-        let description = match llm::describe_image(&file, &metadata.description_context()).await {
+        let description = match llm::describe_image(&file, &metadata.description_context(), &prompt).await {
             Ok(description) => description,
             Err(e) => {
                 println!("Failed to describe image for {}: {:?}", file, e);
                 continue;
             }
         };
+        // Now generate embedding for the description
+        let description_embedding = match embedding::generate_embedding(description.clone()).await {
+            Ok(embedding) => embedding,
+            Err(e) => {
+                println!("Failed to generate embedding for {}: {:?}", file, e);
+                continue;
+            }
+        };
         metadata.description = description;
+        metadata.description_embedding = description_embedding;
 
         // Write updated metadata
         match metadata::write_metadata(&file, metadata).await {
@@ -153,6 +162,33 @@ async fn tag(files: Vec<String>, tags: &Vec<String>, overwrite: bool) -> Result<
     Ok(())
 }
 
+
+async fn find_similar(reference_file: &str, files: Vec<String>) -> Result<(), Box<dyn Error>> {
+    // Load original metadata
+    let reference_metadata = metadata::get_metadata(&reference_file)?;
+
+    // Now load metadata for all other files
+    let files_metadata: Vec<(String, metadata::PhotoMeta)> = metadata::get_metadata_list(&files)
+        .into_iter()
+        .flatten()
+        .collect();
+
+    // Now sort by cosine similarity
+    let mut similarity_list: Vec<(String, f64)> = vec![];
+    for (file, metadata) in files_metadata {
+        let similarity = embedding::cosine_similarity(&reference_metadata.description_embedding, &metadata.description_embedding);
+        similarity_list.push((file, similarity));
+    }
+    similarity_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+    // Print
+    for (file, similarity) in similarity_list.iter() {
+        println!("{}: {}", file, similarity);
+    }
+
+    Ok(())
+}
+
 pub async fn run(args: &args::Args) -> Result<(), Box<dyn Error>> {
     // expand glob pattern in files
     let files = glob(&args.files)?
@@ -167,11 +203,13 @@ pub async fn run(args: &args::Args) -> Result<(), Box<dyn Error>> {
     if args.action == "tag-person" {
         return tag_person(&args.reference_file, files, &args.person_name, args.confidence).await;
     } else if args.action == "tag-description" {
-        return tag_description(files, args.overwrite).await;
+        return tag_description(files, args.overwrite, &args.prompt).await;
     } else if args.action == "tag" {
         return tag(files, &tags, args.overwrite).await;
     } else if args.action == "clear-metadata" {
         return clear_metadata(files).await;
+    } else if args.action == "find-similar" {
+        return find_similar(&args.reference_file, files).await;
     } else if args.action == "show-metadata" {
         return show_metadata(files).await;
     } else {

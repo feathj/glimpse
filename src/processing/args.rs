@@ -3,7 +3,7 @@ use clap::Parser;
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 pub struct Args {
-    #[arg(short, long)]
+    #[arg(short, long, required = true)]
     pub action: String,
     #[clap(short, long, required = true)]
     pub files: String,
@@ -17,4 +17,6 @@ pub struct Args {
     pub overwrite: bool,
     #[clap(short, long, required_if_eq("action", "tag"), default_value = "")]
     pub tags: String,
+    #[arg(short, long, required = false, default_value = "")]
+    pub prompt: String,
 }

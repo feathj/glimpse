@@ -3,12 +3,13 @@ use little_exif::exif_tag::ExifTag;
 use little_exif::u8conversion::*;
 
 use serde::{Deserialize, Serialize};
-use std::error::Error;
+use std::{error::Error, vec};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PhotoMeta {
     pub people: Vec<String>,
     pub description: String,
+    pub description_embedding: Vec<f64>,
     pub tags: Vec<String>,
 }
 
@@ -17,6 +18,7 @@ impl PhotoMeta {
         let description_context = PhotoMeta {
             people: self.people.clone(),
             description: "".to_string(),
+            description_embedding: vec![],
             tags: vec![],
         };
         serde_json::to_string(&description_context).unwrap()
@@ -40,8 +42,19 @@ pub fn get_metadata(file: &str) -> Result<PhotoMeta, Box<dyn Error>> {
     Ok(PhotoMeta {
         people: vec![],
         description: "".to_string(),
+        description_embedding: vec![],
         tags: vec![],
     })
+}
+
+// Return a tuple of the metadata and the file path
+pub fn get_metadata_list(files: &Vec<String>) -> Result<Vec<(String, PhotoMeta)>, Box<dyn Error>> {
+    let mut metadata_list = vec![];
+    for file in files {
+        let metadata = get_metadata(&file)?;
+        metadata_list.push((file.clone(), metadata));
+    }
+    Ok(metadata_list)
 }
 
 pub async fn write_metadata(file: &str, photo_metadata: PhotoMeta) -> Result<(), Box<dyn Error>> {
