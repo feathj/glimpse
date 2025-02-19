@@ -10,7 +10,8 @@ use crate::ai::bedrock::BedrockConverseError;
 use crate::graphics::images::{path_to_bedrock_image_block, resize_temp_image, clear_temp_file};
 use crate::processing::metadata::PhotoMeta;
 
-const MODEL_ID: &str = "anthropic.claude-3-haiku-20240307-v1:0";
+// const MODEL_ID: &str = "anthropic.claude-3-haiku-20240307-v1:0";
+const MODEL_ID: &str = "anthropic.claude-3-5-sonnet-20241022-v2:0";
 
 fn get_converse_output_text(output: ConverseOutput) -> Result<String, BedrockConverseError> {
     let text = output

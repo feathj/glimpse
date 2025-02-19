@@ -163,7 +163,7 @@ async fn tag(files: Vec<String>, tags: &Vec<String>, overwrite: bool) -> Result<
 }
 
 
-async fn find_similar(reference_file: &str, files: Vec<String>) -> Result<(), Box<dyn Error>> {
+async fn find_similar(reference_file: &str, files: Vec<String>, top: u32) -> Result<(), Box<dyn Error>> {
     // Load original metadata
     let reference_metadata = metadata::get_metadata(&reference_file)?;
 
@@ -179,7 +179,11 @@ async fn find_similar(reference_file: &str, files: Vec<String>) -> Result<(), Bo
         let similarity = embedding::cosine_similarity(&reference_metadata.description_embedding, &metadata.description_embedding);
         similarity_list.push((file, similarity));
     }
+    // Sort by similarity with top N
     similarity_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    if similarity_list.len() > top as usize {
+        similarity_list.truncate(top as usize);
+    }
 
     // Print
     for (file, similarity) in similarity_list.iter() {
@@ -209,7 +213,7 @@ pub async fn run(args: &args::Args) -> Result<(), Box<dyn Error>> {
     } else if args.action == "clear-metadata" {
         return clear_metadata(files).await;
     } else if args.action == "find-similar" {
-        return find_similar(&args.reference_file, files).await;
+        return find_similar(&args.reference_file, files, args.top).await;
     } else if args.action == "show-metadata" {
         return show_metadata(files).await;
     } else {

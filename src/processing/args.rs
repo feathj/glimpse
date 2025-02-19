@@ -19,4 +19,6 @@ pub struct Args {
     pub tags: String,
     #[arg(short, long, required = false, default_value = "")]
     pub prompt: String,
+    #[clap(short, long, default_value = "10")]
+    pub top: u32
 }
