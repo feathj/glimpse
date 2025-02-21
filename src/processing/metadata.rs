@@ -13,18 +13,6 @@ pub struct PhotoMeta {
     pub tags: Vec<String>,
 }
 
-impl PhotoMeta {
-    pub fn description_context(&self) -> String {
-        let description_context = PhotoMeta {
-            people: self.people.clone(),
-            description: "".to_string(),
-            description_embedding: vec![],
-            tags: vec![],
-        };
-        serde_json::to_string(&description_context).unwrap()
-    }
-}
-
 pub fn get_metadata(file: &str) -> Result<PhotoMeta, Box<dyn Error>> {
     let path = std::path::Path::new(file);
     let metadata = Metadata::new_from_path(path)?;
@@ -51,8 +39,11 @@ pub fn get_metadata(file: &str) -> Result<PhotoMeta, Box<dyn Error>> {
 pub fn get_metadata_list(files: &Vec<String>) -> Result<Vec<(String, PhotoMeta)>, Box<dyn Error>> {
     let mut metadata_list = vec![];
     for file in files {
-        let metadata = get_metadata(&file)?;
-        metadata_list.push((file.clone(), metadata));
+        match get_metadata(&file) {
+            Ok(metadata) => metadata_list.push((file.clone(), metadata)),
+            // TODO: Verbosity
+            Err(e) => println!("Failed to get metadata for {}: {:?}", file, e),
+        }
     }
     Ok(metadata_list)
 }
@@ -67,4 +58,11 @@ pub async fn write_metadata(file: &str, photo_metadata: PhotoMeta) -> Result<(),
     metadata.write_to_file(path)?;
 
     Ok(())
+}
+
+// Implement print
+impl std::fmt::Display for PhotoMeta {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "People: {:?}, Description: {}, Tags: {:?}", self.people, self.description, self.tags)
+    }
 }

@@ -28,12 +28,38 @@ fn get_converse_output_text(output: ConverseOutput) -> Result<String, BedrockCon
     Ok(text)
 }
 
-pub async fn describe_image(file_path: &str, additional_context: &str, prompt: &str) -> Result<String, Box<dyn Error>> {
-    // Inject the prompt if provided, otherwise use a generic
+pub async fn describe_image(file_path: &str, _image_metadata: &PhotoMeta, prompt: &str) -> Result<String, Box<dyn Error>> {
     let content_text = if prompt.is_empty() {
-        format!("Describe the following image. Here is some additional context: {}", additional_context)
+        //let people = image_metadata.people.iter().fold("".to_string(), |acc, person| format!("{}<people>{}</people>", acc, person));
+        // Claude appears to ignore people information provided in prompt TODO: Figure this out
+        format!(
+            "
+            You are an expert image analyst providing detailed visual descriptions. Please describe the provided image comprehensively, focusing on:
+
+            1. People in the scene:
+                - Number of people
+                - Their actions, interactions, and positioning
+                - Notable expressions and body language
+                - Distinctive clothing or accessories
+                - Group dynamics if multiple people are present
+
+            2. Setting and context:
+                - Location type (indoor/outdoor, specific setting)
+                - Event or activity type (if apparent)
+                - Time period indicators
+                - Overall mood/atmosphere
+
+            3. Key visual details for categorization:
+                - Composition style
+                - Lighting conditions
+                - Notable objects or elements
+                - Any unique or distinguishing features
+
+            Please emphasize details that would be useful for future categorization or searching.
+            "
+        )
     } else {
-        format!("{}. Here is some additional context: {}", prompt, additional_context)
+        prompt.to_string()
     };
 
     let tmp_file_path = resize_temp_image(file_path, 1000)?; // TODO: make a more scientific decision on the resizes
@@ -63,24 +89,34 @@ pub async fn describe_image(file_path: &str, additional_context: &str, prompt: &
 
 pub async fn tag_metadata(metadata: &PhotoMeta, tags: &Vec<String>) -> Result<String, Box<dyn Error>> {
     let labels = tags.iter().fold("".to_string(), |acc, tag| format!("{}<label>{}</label>", acc, tag));
+    let tagged_people = metadata.people.iter().fold("".to_string(), |acc, person| format!("{}<person>{}</person>", acc, person));
 
     let prompt = format!(
         "
-        You are acting as an expert labeling system for a photo.
+        You are acting as an expert labeling system for an image.
         You will be given a list of possible labels to chose from.
         You will chose exactly one from that list.
-        You will chose the label based on the provided description and people tagged in the photo.
+        You will chose the label based on the provided description and people tagged in the image.
         Return the label only in <label></label>.
 
-        <people>{:?}</people>
+        <people>{}</people>
         <description>{}</description>
-        <labels>{}</labels>", metadata.people, metadata.description, labels
+        <labels>{}</labels>", tagged_people, metadata.description, labels
     );
-    println!("Prompt: {}", prompt);
     let result = converse(&prompt).await
-    .map(|response| response.replace("<TAG>", "").replace("</TAG>", ""));
-    println!("Result: {}", result.as_ref().unwrap());
-    result
+    .map(|response| response.replace("<label>", "").replace("</label>", ""));
+
+    // Check if the response is in the list of tags
+    match result {
+        Ok(tag) => {
+            if tags.contains(&tag) {
+                Ok(tag)
+            } else {
+                Ok("".to_string())
+            }
+        }
+        Err(e) => Err(e)
+    }
 }
 
 pub async fn converse(content: &str) -> Result<String, Box<dyn Error>> {
