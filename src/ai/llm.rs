@@ -1,17 +1,21 @@
 use std::error::Error;
+use tokio::fs;
 
+use async_openai::types::{ChatCompletionRequestMessageContentPartImageArgs, ChatCompletionRequestMessageContentPartTextArgs, ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequestArgs, ImageDetail, ImageUrlArgs};
 use aws_sdk_bedrockruntime::{
     operation::converse::ConverseOutput,
     types::{ContentBlock, ConversationRole, Message},
 };
+use base64::{engine::general_purpose, Engine};
 
 use crate::ai::bedrock::bedrock_client;
 use crate::ai::bedrock::BedrockConverseError;
+use crate::ai::openai::openai_client;
 use crate::graphics::images::{path_to_bedrock_image_block, resize_temp_image, clear_temp_file};
 use crate::processing::metadata::PhotoMeta;
 
-// const MODEL_ID: &str = "anthropic.claude-3-haiku-20240307-v1:0";
-const MODEL_ID: &str = "anthropic.claude-3-5-sonnet-20241022-v2:0";
+const BEDROCK_MODEL_ID: &str = "anthropic.claude-3-5-sonnet-20241022-v2:0";
+const OPENAI_MODEL_ID: &str = "gpt-4o";
 
 fn get_converse_output_text(output: ConverseOutput) -> Result<String, BedrockConverseError> {
     let text = output
@@ -28,7 +32,7 @@ fn get_converse_output_text(output: ConverseOutput) -> Result<String, BedrockCon
     Ok(text)
 }
 
-pub async fn describe_image(file_path: &str, _image_metadata: &PhotoMeta, prompt: &str) -> Result<String, Box<dyn Error>> {
+pub async fn describe_image(provider: &str, file_path: &str, _image_metadata: &PhotoMeta, prompt: &str) -> Result<String, Box<dyn Error>> {
     let content_text = if prompt.is_empty() {
         //let people = image_metadata.people.iter().fold("".to_string(), |acc, person| format!("{}<people>{}</people>", acc, person));
         // Claude appears to ignore people information provided in prompt TODO: Figure this out
@@ -62,19 +66,29 @@ pub async fn describe_image(file_path: &str, _image_metadata: &PhotoMeta, prompt
         prompt.to_string()
     };
 
+    // Get result based on provider
     let tmp_file_path = resize_temp_image(file_path, 1000)?; // TODO: make a more scientific decision on the resizes
+    let result = match provider {
+        "bedrock" => describe_image_bedrock(&tmp_file_path, &content_text).await,
+        "openai" => describe_image_openai(&tmp_file_path, &content_text).await,
+        _ => return Err("Invalid provider".into()),
+    };
+    clear_temp_file(&tmp_file_path)?;
+    return Ok(result.unwrap());
+}
+
+pub async fn describe_image_bedrock(tmp_file_path: &str, prompt: &str) -> Result<String, Box<dyn Error>> {
     let message_user = Message::builder()
         .role(ConversationRole::User)
-        .content(ContentBlock::Text(content_text.to_string()))
+        .content(ContentBlock::Text(prompt.to_string()))
         .content(ContentBlock::Image(path_to_bedrock_image_block(&tmp_file_path)?))
         .build()?;
-    clear_temp_file(&tmp_file_path)?;
 
     let bedrock_client = bedrock_client().await;
     let response = bedrock_client
         .converse()
         .messages(message_user)
-        .model_id(MODEL_ID)
+        .model_id(BEDROCK_MODEL_ID)
         .send()
         .await;
 
@@ -87,7 +101,45 @@ pub async fn describe_image(file_path: &str, _image_metadata: &PhotoMeta, prompt
     }
 }
 
-pub async fn tag_metadata(metadata: &PhotoMeta, tags: &Vec<String>) -> Result<String, Box<dyn Error>> {
+
+pub async fn describe_image_openai(tmp_file_path: &str, prompt: &str) -> Result<String, Box<dyn Error>> {
+    // Read the image file and encode as base64
+    let image_bytes = fs::read(tmp_file_path).await?;
+    let image_base64 = general_purpose::STANDARD.encode(&image_bytes);
+
+    let client = openai_client().await;
+    let request = CreateChatCompletionRequestArgs::default()
+        .model(OPENAI_MODEL_ID)
+        .max_tokens(4000_u32)
+        .messages([ChatCompletionRequestUserMessageArgs::default()
+            .content(vec![
+                ChatCompletionRequestMessageContentPartTextArgs::default()
+                    .text(prompt)
+                    .build()?
+                    .into(),
+                ChatCompletionRequestMessageContentPartImageArgs::default()
+                    .image_url(
+                        ImageUrlArgs::default()
+                            .url(format!("data:image/jpeg;base64,{}", image_base64))
+                            .detail(ImageDetail::High)
+                            .build()?,
+                    )
+                    .build()?
+                    .into(),
+            ])
+            .build()?
+            .into()])
+        .build()?;
+
+    let response = client.chat().create(request).await?;
+    let choice = response.choices.get(0).ok_or("no choices")?;
+    let message = choice.message.content.clone().unwrap_or_default();
+
+    Ok(message)
+}
+
+
+pub async fn tag_metadata(_provider: &str, metadata: &PhotoMeta, tags: &Vec<String>) -> Result<String, Box<dyn Error>> {
     let labels = tags.iter().fold("".to_string(), |acc, tag| format!("{}<label>{}</label>", acc, tag));
     let tagged_people = metadata.people.iter().fold("".to_string(), |acc, person| format!("{}<person>{}</person>", acc, person));
 
@@ -123,7 +175,7 @@ pub async fn converse(content: &str) -> Result<String, Box<dyn Error>> {
     let bedrock_client = bedrock_client().await;
     let response = bedrock_client
         .converse()
-        .model_id(MODEL_ID)
+        .model_id(BEDROCK_MODEL_ID)
         .messages(
             Message::builder()
                 .role(ConversationRole::User)

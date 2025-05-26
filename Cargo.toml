@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.94"
+async-openai = "0.28.1"
 aws-config = "1.5.11"
 aws-sdk-bedrockruntime = "1.65.0"
 aws-sdk-rekognition = "1.54.0"

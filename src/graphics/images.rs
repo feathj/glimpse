@@ -28,7 +28,7 @@ pub fn resize_image(input_path: &str, output_path: &str, max_size: u32) -> Resul
     
     // Resize the image
     let resized = img.resize(new_width, new_height, FilterType::Lanczos3);
-    
+
     // Save to output path
     resized.save(output_path)?;
     

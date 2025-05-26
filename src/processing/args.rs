@@ -10,6 +10,8 @@ pub struct Args {
     pub files: String,
     #[clap(short, long, default_value = "10")]
     pub top: u32,
+    #[clap(short, long, default_value = "bedrock")]
+    pub provider: String,
     // Tagging arguments
     #[clap(short, long, required_if_eq("action", "tag-person"), default_value = "")]
     pub person_name: String,

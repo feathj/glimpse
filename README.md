@@ -36,8 +36,9 @@ rust installed on your system, or you can use a prebuilt binary from the release
 
 Once you have the binary, you can run `glimpse --help` to see the available commands and options.
 
-Currently, glimpse requires AWS credentials with access to both bedrock and regkognition. Future
-versions will also support other AI providers and models.
+Currently, glimpse requires AWS credentials with access to both bedrock and regkognition or OpenAI
+credentials. Note that OpenAI does not support facial regognition, so if you are using OpenAI, face
+tagging will not be available.
 
 Some sample commands
 --------------------

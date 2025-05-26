@@ -7,7 +7,13 @@ use crate::processing::metadata;
 use crate::ai::{vision, llm, embedding};
 use crate::processing::args;
 
-async fn tag_person(reference_file: &str, files: Vec<String>, person_name: &str, confidence: f32) -> Result<(), Box<dyn Error>> {
+async fn tag_person(provider: &str, reference_file: &str, files: Vec<String>, person_name: &str, confidence: f32) -> Result<(), Box<dyn Error>> {
+    // bedrock is only provider supports this for now
+    if provider != "bedrock" {
+        println!("Provider {} not supported for tag-person", provider);
+        return Ok(());
+    }
+
     let total = files.len();
     let mut count = 0;
     for file in files {
@@ -40,7 +46,13 @@ async fn tag_person(reference_file: &str, files: Vec<String>, person_name: &str,
     Ok(())
 }
 
-async fn find_person(files: Vec<String>, person_name: &str) -> Result<(), Box<dyn Error>> {
+async fn find_person(provider: &str, files: Vec<String>, person_name: &str) -> Result<(), Box<dyn Error>> {
+    // bedrock is only provider supports this for now
+    if provider != "bedrock" {
+        println!("Provider {} not supported for find-person", provider);
+        return Ok(());
+    }
+
     let files_metadata = metadata::get_metadata_list(&files)?;
     for (file, metadata) in files_metadata {
         if metadata.people.contains(&person_name.to_string()) {
@@ -64,6 +76,7 @@ async fn clear_metadata(files: Vec<String>) -> Result<(), Box<dyn Error>> {
             people: vec![],
             description: "".to_string(),
             description_embedding: vec![],
+            description_embedding_model: "".to_string(),
             tags: vec![],
         }).await {
             Ok(_) => println!("Cleared metadata for {}", file),
@@ -117,7 +130,7 @@ async fn sort_by_tag(files: Vec<String>, output_directory: &str) -> Result<(), B
     Ok(())
 }
 
-async fn tag_description(files: Vec<String>, overwrite: bool, prompt: &str) -> Result<(), Box<dyn Error>> {
+async fn tag_description(provider: &str, files: Vec<String>, overwrite: bool, prompt: &str) -> Result<(), Box<dyn Error>> {
     let total = files.len();
     let mut count = 0;
     for file in files {
@@ -139,7 +152,7 @@ async fn tag_description(files: Vec<String>, overwrite: bool, prompt: &str) -> R
         }
 
         // Get description from AI, including additional context (people in the photo)
-        let description = match llm::describe_image(&file, &metadata, &prompt).await {
+        let description = match llm::describe_image(&provider, &file, &metadata, &prompt).await {
             Ok(description) => description,
             Err(e) => {
                 println!("Failed to describe image for {}: {:?}", file, e);
@@ -147,15 +160,18 @@ async fn tag_description(files: Vec<String>, overwrite: bool, prompt: &str) -> R
             }
         };
         // Now generate embedding for the description
-        let description_embedding = match embedding::generate_embedding(description.clone()).await {
+        let (description_embedding_model, embedding_result) = embedding::generate_embedding(&provider, description.clone()).await;
+        let description_embedding = match embedding_result {
             Ok(embedding) => embedding,
             Err(e) => {
                 println!("Failed to generate embedding for {}: {:?}", file, e);
                 continue;
             }
         };
+
         metadata.description = description;
         metadata.description_embedding = description_embedding;
+        metadata.description_embedding_model = description_embedding_model;
 
         // Write updated metadata
         match metadata::write_metadata(&file, metadata).await {
@@ -166,7 +182,14 @@ async fn tag_description(files: Vec<String>, overwrite: bool, prompt: &str) -> R
     Ok(())
 }
 
-async fn tag(files: Vec<String>, tags: &Vec<String>, overwrite: bool) -> Result<(), Box<dyn Error>> {
+async fn tag(provider: &str, files: Vec<String>, tags: &Vec<String>, overwrite: bool) -> Result<(), Box<dyn Error>> {
+    // bedrock is only provider supports this for now
+    // TODO: add support for openai
+    if provider != "bedrock" {
+        println!("Provider {} not supported for tag", provider);
+        return Ok(());
+    }
+
     let total = files.len();
     let mut count = 0;
     for file in files {
@@ -187,7 +210,7 @@ async fn tag(files: Vec<String>, tags: &Vec<String>, overwrite: bool) -> Result<
         }
 
         // Get tag from AI
-        let tag = match llm::tag_metadata(&metadata, tags).await {
+        let tag = match llm::tag_metadata(&provider, &metadata, tags).await {
             Ok(tag) => tag,
             Err(e) => {
                 println!("Failed to tag from metadata for {}: {:?}", file, e);
@@ -246,7 +269,7 @@ async fn find_similar(reference_file: &str, files: Vec<String>, top: u32) -> Res
     Ok(())
 }
 
-async fn find(files: Vec<String>, description: &str, top: u32) -> Result<(), Box<dyn Error>> {
+async fn find(provider: &str, files: Vec<String>, description: &str, top: u32) -> Result<(), Box<dyn Error>> {
     // Load metadata for all  files
     let files_metadata: Vec<(String, metadata::PhotoMeta)> = match metadata::get_metadata_list(&files) {
         Ok(metadata) => metadata,
@@ -257,7 +280,9 @@ async fn find(files: Vec<String>, description: &str, top: u32) -> Result<(), Box
     };
 
     // Generate embedding for the description
-    let description_embedding = embedding::generate_embedding(description.to_string()).await?;
+    // TODO: check if models are the same
+    let (_model, embedding_result) = embedding::generate_embedding(&provider, description.to_string()).await;
+    let description_embedding = embedding_result?;
 
     // Now generate similarity list
     let mut similarity_list: Vec<(String, f64)> = vec![];
@@ -292,14 +317,14 @@ pub async fn run(args: &args::Args) -> Result<(), Box<dyn Error>> {
         .collect();
 
     match args.action.as_str() {
-        "tag-person" => tag_person(&args.reference_file, files, &args.person_name, args.confidence).await,
-        "find-person" => find_person(files, &args.person_name).await,
-        "tag-description" => tag_description(files, args.overwrite, &args.prompt).await,
-        "tag" => tag(files, &tags, args.overwrite).await,
+        "tag-person" => tag_person(&args.provider, &args.reference_file, files, &args.person_name, args.confidence).await,
+        "find-person" => find_person(&args.provider, files, &args.person_name).await,
+        "tag-description" => tag_description(&args.provider, files, args.overwrite, &args.prompt).await,
+        "tag" => tag(&args.provider, files, &tags, args.overwrite).await,
         "clear-metadata" => clear_metadata(files).await,
         "sort-by-tag" => sort_by_tag(files, &args.output_directory).await,
         "find-similar" => find_similar(&args.reference_file, files, args.top).await,
-        "find" => find(files, &args.description, args.top).await,
+        "find" => find(&args.provider, files, &args.description, args.top).await,
         "show-metadata" => show_metadata(files).await,
         _ => {
             println!("Unknown action: {}", args.action);

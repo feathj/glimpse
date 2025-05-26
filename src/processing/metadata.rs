@@ -10,6 +10,7 @@ pub struct PhotoMeta {
     pub people: Vec<String>,
     pub description: String,
     pub description_embedding: Vec<f64>,
+    pub description_embedding_model: String,
     pub tags: Vec<String>,
 }
 
@@ -31,6 +32,7 @@ pub fn get_metadata(file: &str) -> Result<PhotoMeta, Box<dyn Error>> {
         people: vec![],
         description: "".to_string(),
         description_embedding: vec![],
+        description_embedding_model: "".to_string(),
         tags: vec![],
     })
 }
@@ -64,5 +66,6 @@ pub async fn write_metadata(file: &str, photo_metadata: PhotoMeta) -> Result<(),
 impl std::fmt::Display for PhotoMeta {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "People: {:?}, Description: {}, Tags: {:?}", self.people, self.description, self.tags)
+        // write!(f, "meta: {:?}", self)
     }
 }
